@@ -1,0 +1,120 @@
+Get the data from: 
+
+wget http://www.daviddlewis.com/resources/testcollections/reuters21578/reuters21578.tar.gz
+
+Place it within the example folder from mahout home director: 
+
+mahout-0.7/examples/reuters 
+
+mkdir reuters 
+
+cd reuters 
+
+ 
+
+mkdir reuters-out 
+
+mv reuters21578.tar.gz reuters-out 
+
+cd reuters-out 
+
+tar -xzvf reuters21578.tar.gz
+
+cd .. 
+
+Mahout Commands 
+
+#1 run the org.apache.lucene.benchmark .utils.ExtractReuters class
+
+${MAHOUT_HOME}/bin/mahout org.apache.lucene.benchmark.utils.ExtractReuters reuters-out reuters-text
+
+#2 copy the file to your HDFS
+
+bin/hadoop fs -copyFromLocal /home/bigdata/mahout-distribution-
+
+0.7/examples/reuters-text hdfs://localhost:54310/user/bigdata/
+
+#3 generate sequence-file 
+
+mahout seqdirectory -i hdfs://localhost:54310/user/bigdata/reuters-text -o hdfs://localhost:54310/user/bigdata/reuters-seqfiles -c UTF-8 -chunk 5 
+
+-chunk → specifying the number of data blocks
+
+UTF-8 → specifying the appropriate input format
+
+#4 Check the generated sequence-file 
+
+mahout-0.7$ ./bin/mahout seqdumper -s /your-hdfs-path-to/reuters-
+seqfiles/chunk-0 |less 
+
+#5 From sequence-file generate vector file 
+
+mahout seq2sparse -i hdfs://localhost:54310/user/bigdata/reuters-seqfiles -o hdfs://localhost:54310/user/bigdata/reuters-vectors -ow
+
+-ow → overwrite
+
+#6 take a look at it should have 7 items by using this command
+
+bin/hadoop fs -ls
+
+reuters-vectors/df-count 
+
+reuters-vectors/dictionary.file-0 
+
+reuters-vectors/frequency.file-0 
+
+reuters-vectors/tf-vectors 
+
+reuters-vectors/tfidf-vectors 
+
+reuters-vectors/tokenized-documents 
+
+reuters-vectors/wordcount 
+
+bin/hadoop fs -ls reuters-vectors 
+
+#7 check the vector: reuters-vectors/tf-vectors/part-r-00000
+
+mahout-0.7$ hadoop fs -ls reuters-vectors/tf-vectors 
+
+#8 Run canopy clustering to get optimal initial centroids for k-means
+
+mahout canopy -i hdfs://localhost:54310/user/bigdata/reuters-vectors/tf-vectors -o hdfs://localhost:54310/user/bigdata/reuters-
+canopy-centroids -dm org.apache.mahout.common.distance.CosineDistanceMeasure -t1 1500 -t2 2000
+
+-dm → specifying the distance measure to be used while clustering (here 
+
+it is cosine distance measure)
+
+#9 Run k-means clustering algorithm
+
+mahout kmeans -i hdfs://localhost:54310/user/bigdata/reuters-vectors/tfidf-vectors -c hdfs://localhost:54310/user/bigdata/reuters-
+canopy-centroids -o hdfs://localhost:54310/user/bigdata/reuters-kmeans-clusters -cd 0.1 -ow -x 20 -k 10
+
+-i → input
+
+-o → output
+
+-c → initial centroids for k-means (not defining this parameter will 
+
+trigger k-means to generate random initial centroids)
+
+-cd → convergence delta parameter
+
+-ow → overwrite
+
+-x → specifying number of k-means iterations
+
+-k → specifying number of clusters
+
+#10 Export k-means output using Cluster Dumper tool
+
+mahout clusterdump -dt sequencefile -d 
+
+hdfs://localhost:54310/user/bigdata/reuters-vectors/dictionary.file-* 
+
+-i hdfs://localhost:54310/user/bigdata/reuters-kmeans-clusters/clusters-8-final -o clusters.txt -b 15
+
+-dt → dictionary type
+
+-b → specifying length of each word
